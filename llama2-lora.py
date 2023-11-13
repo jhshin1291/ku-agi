@@ -121,7 +121,7 @@ def chat_with(model_name, query):
     model = model_dict[model_name]
 
     maxlen = max([len(model_name) for model_name in model_dict.keys()])
-    model_name = model_name.ljust(max_len)
+    model_name = model_name.ljust(maxlen)
     print(f"[{model_name}] generating the answer ....")
     output = model(f"<s>[INST] {query} [/INST]")
     output = re.sub("^.*\[\/INST\]  ", "", output[0]['generated_text'])
