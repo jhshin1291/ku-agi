@@ -45,7 +45,9 @@ quant_config = BitsAndBytesConfig(
 base_model = AutoModelForCausalLM.from_pretrained(
     base_model_name,
     quantization_config=quant_config,
-    device_map={"": 0}
+    device_map="auto"
+    # device_map={"": 0}
+
 )
 base_model.config.use_cache = False
 base_model.config.pretraining_tp = 1
