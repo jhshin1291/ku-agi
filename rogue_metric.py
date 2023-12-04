@@ -1,4 +1,4 @@
-!# scipts/bin/python3
+#!/usr/bin/python
 
 '''
  https://github.com/rickiepark/nlp-with-transformers/blob/main/06_summarization.ipynb
