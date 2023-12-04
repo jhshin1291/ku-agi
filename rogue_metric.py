@@ -14,10 +14,11 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 rouge_metric = evaluate.load("rouge")
 
-# CNN/DailyMail 데이터셋에서 PEGASUS 평가하기
+# our data here
+data_name = ""
+split= ""
 
-# "cnn_dailymail" 데이터셋 다운로드 에러가 발생할 경우 대신 "ccdv/cnn_dailymail"을 사용하세요.
-dataset = load_dataset("cnn_dailymail", version="3.0.0")
+dataset = load_dataset(data_name, split=split)
 rouge_metric = evaluate.load("rouge", cache_dir=None)
 rouge_names = ["rouge1", "rouge2", "rougeL", "rougeLsum"]
 
@@ -32,10 +33,12 @@ def evaluate_summaries_baseline(dataset, metric,
 
 test_sampled = dataset["test"].shuffle(seed=42).select(range(1000))
 
+
+
 score = evaluate_summaries_baseline(test_sampled, rouge_metric)
 rouge_dict = dict((rn, score[rn]) for rn in rouge_names)
 
-# 확인용 출력
+# baseline 확인용 출력
 # pd.DataFrame.from_dict(rouge_dict, orient="index", columns=["baseline"]).T
 
 from tqdm import tqdm
@@ -48,10 +51,14 @@ def chunks(list_of_elements, batch_size):
     for i in range(0, len(list_of_elements), batch_size):
         yield list_of_elements[i : i + batch_size]
 
+# our data here
+column_text = ""
+column_summary = ""
+
 def evaluate_summaries_pegasus(dataset, metric, model, tokenizer,
                                batch_size=16, device=device,
-                               column_text="article",
-                               column_summary="highlights"):
+                               column_text=column_text,
+                               column_summary=column_summary):
     article_batches = list(chunks(dataset[column_text], batch_size))
     target_batches = list(chunks(dataset[column_summary], batch_size))
 
@@ -76,7 +83,8 @@ def evaluate_summaries_pegasus(dataset, metric, model, tokenizer,
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-model_ckpt = "google/pegasus-cnn_dailymail"
+# our data here
+model_ckpt = ""
 tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
 model = AutoModelForSeq2SeqLM.from_pretrained(model_ckpt).to(device)
 score = evaluate_summaries_pegasus(test_sampled, rouge_metric,
