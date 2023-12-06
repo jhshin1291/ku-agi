@@ -76,7 +76,7 @@ base_model = AutoModelForCausalLM.from_pretrained(
 
 rouge = evaluate.load('rouge')
 # test_data = ld("billsum", split="ca_test")
-test_data = ld("billsum", split="ca_test[10:13]")
+test_data = ld("billsum", split="ca_test[0:100]")
 
 # [5] Get max length of input data 
 lenmax = 0
@@ -85,17 +85,39 @@ for item in test_data:
   if lenitem > lenmax:
     lenmax = lenitem
 
+'''
+evaluate vanila llama
+'''
+# Evaluating rouge-score
+references = []
+predictions = []
+
+model = pipeline(task="summarization", model=base_model, tokenizer=base_tokenizer, max_length=4096)
+
+for item in test_data:
+    reference = item['summary']
+    references.append(reference)
+
+    prediction = model.predict(item['text'])
+    predictions.append(prediction[0]['summary_text'])
+
+    
+results = rouge.compute(predictions=predictions,
+                        references=references)
+
+print("vanila", results)
+
+'''
+evaluate model with fine-tuned to the dataset: 1) ccdv-sum, 2) GEM-xlsum
+'''
 for module in module_list:
     fine_tuned_model = PeftModel.from_pretrained(base_model, module, local_files_only=True)
     
-    #TODO: evaluate fine-tuned model respectively: 1) paper summarization, 2) article summarization
-    
-    # res = fine_tuned_model(tokenized_billsum[0]['input_ids'])
-    # [7] Evaluating rouge-score
+    # Evaluating rouge-score
     references = []
     predictions = []
 
-    fine_tuned_model = pipeline(task="summarization", model=fine_tuned_model, tokenizer=base_tokenizer, max_length=4000)
+    fine_tuned_model = pipeline(task="summarization", model=fine_tuned_model, tokenizer=base_tokenizer, max_length=4096)
 
     for item in test_data:
         # print("item", item)
@@ -111,14 +133,15 @@ for module in module_list:
 
     print(module, results)
 
-
+'''
+evaluate merged model with versatile ratio (10:0, 9:1, ..., 0:10)
+'''
 for x in range(0, 11): 
     i = x
     j = 10 - x
     references = []
     predictions = []
     merged_model = PeftModel.from_pretrained(base_model, merged_dir + str(i) + 'to' + str(j) + '/', local_files_only=True)
-    #TODO: evaluate merged model
     merged_model = pipeline(task="summarization", model=merged_model, tokenizer=base_tokenizer, max_length=4096)
 
     for item in test_data:
