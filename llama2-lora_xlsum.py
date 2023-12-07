@@ -16,13 +16,20 @@ from trl import SFTTrainer
 import re
 import pdb
 
+# settings
+epochs = 0.07
+DO_FINE_TUNING = True
+
 # [1] Setting Dataset & Basemodel
-data_name = "ccdv/arxiv-summarization"
-training_data = load_dataset(data_name, split="train")
+data_name = "GEM/xlsum"
+dataset = load_dataset(data_name, "english")
+training_data = dataset['train']
+test_data  = dataset['test']
+validation_data = dataset['validation']
 
 # Model and tokenizer names
 base_model_name = "NousResearch/Llama-2-7b-hf"
-fine_tuned_model_name = "oslab/llama-2-7b-oslab2"
+fine_tuned_model_name = "oslab/llama-2-7b-xlsum"
 
 # [2] Creating Llama2 Tokenizer
 llama_tokenizer = AutoTokenizer.from_pretrained(base_model_name, trust_remote_code=True)
@@ -42,11 +49,11 @@ base_model = AutoModelForCausalLM.from_pretrained(
     base_model_name,
     quantization_config=quant_config,
     device_map="auto" # accelerate library
-    # device_map={"": 0}
+    #device_map={"": 0}
+
 )
 base_model.config.use_cache = False
 base_model.config.pretraining_tp = 1
-
 
 # [5] Creating LoRA config based on PEFT parameters
 peft_parameters = LoraConfig(
@@ -60,12 +67,12 @@ peft_parameters = LoraConfig(
 # [6] Creating training parameters
 train_params = TrainingArguments(
     output_dir="./results_modified",
-    num_train_epochs=0.1,
+    num_train_epochs=epochs,
     per_device_train_batch_size=4,
     gradient_accumulation_steps=1,
     optim="paged_adamw_32bit",
     save_steps=25,
-    logging_steps=25,
+    logging_steps=5,
     learning_rate=2e-4,
     weight_decay=0.001,
     fp16=False,
@@ -78,59 +85,28 @@ train_params = TrainingArguments(
     report_to="tensorboard"
 )
 
-
 # [7] Creating Supervised Fine-Tuning trainer
 fine_tuning = SFTTrainer(
     model=base_model,
     train_dataset=training_data,
     peft_config=peft_parameters,
-    # dataset_text_field="text",
-    dataset_text_field="article",
+    max_seq_length=1024,
+    dataset_text_field="text",
     tokenizer=llama_tokenizer,
     args=train_params
 )
 
-
 # [8] do fine-tuning..
-fine_tuning.train()
+if DO_FINE_TUNING:
+  print("Start Fine Tunning!!")
+  fine_tuning.train()
+else:
+  print("Skip Fine Tunning!!")
 
 # [9] save the fine-tuned model object
-fine_tuning.model.save_pretrained(fine_tuned_model_name)
-
-# [10] gen text by fine-tuned model
-lora_config = LoraConfig.from_pretrained(fine_tuned_model_name)
-fine_tuned_model = get_peft_model(base_model, lora_config)
-
-llama2_chat_model = pipeline(task="text-generation", model=base_model_name, tokenizer=llama_tokenizer, max_length=200)
-fine_tuned_model = pipeline(task="text-generation", model=fine_tuned_model, tokenizer=llama_tokenizer, max_length=200)
-
-
-def chat_with(model_name, query):
-    global fine_tuned_model
-    global llama2_chat_model
-
-    model_dict = {
-        "llama2-chat": llama2_chat_model,
-        "llama2-chat-oslab": fine_tuned_model
-    }
-    model = model_dict[model_name]
-
-    maxlen = max([len(model_name) for model_name in model_dict.keys()])
-    model_name = model_name.ljust(maxlen)
-    print(f"[{model_name}] generating the answer ....")
-    output = model(f"<s>[INST] {query} [/INST]")
-    output = re.sub("^.*\[\/INST\]  ", "", output[0]['generated_text'])
-    print(f"[{model_name}] {output}\n\n")
-
-
-while True:
-    print("=" * 60)
-    query = input(f"Hi, sir. What can I do for you? >> ")
-    if query.lower() == "quit":
-        print("Program is over. bye")
-        exit(0)
-
-    chat_with("llama2-chat", query)
-    chat_with("llama2-chat-oslab", query)
-
-
+if DO_FINE_TUNING:
+  print("Save Fine-tuned data!!")
+  fine_tuning.model.save_pretrained(fine_tuned_model_name)
+  print("fine tuning is over")
+else:
+  print("Skip to save fine tuning data")

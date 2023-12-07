@@ -26,8 +26,6 @@ import time
 
 
 # [1] Setting Dataset & Basemodel
-# Dataset
-# data_name = "mlabonne/guanaco-llama2-1k"
 data_name = "ccdv/arxiv-summarization"
 test_data = load_dataset(data_name, split="test")
 
@@ -36,7 +34,6 @@ base_model_name = "NousResearch/Llama-2-7b-hf"
 fine_tuned_model_name = "/home/work/data_yhgo/cyshin/agi/fine-tune_ccdv-sum_epoch01/"
 
 # [2] Creating Llama2 Tokenizer
-# Tokenizer
 llama_tokenizer = AutoTokenizer.from_pretrained(base_model_name, trust_remote_code=True)
 llama_tokenizer.pad_token = llama_tokenizer.eos_token
 llama_tokenizer.padding_side = "right"  # Fix for fp16
@@ -139,10 +136,3 @@ results = rouge.compute(predictions=predictions,
                         references=references)
 
 print(results)
-
-
-
-
-
-
-
