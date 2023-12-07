@@ -17,6 +17,13 @@ import re
 import pdb
 
 import evaluate
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
+from langchain.llms  import HuggingFacePipeline
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+import time
+
 
 # [1] Setting Dataset & Basemodel
 # Dataset
@@ -25,9 +32,7 @@ data_name = "ccdv/arxiv-summarization"
 test_data = load_dataset(data_name, split="test")
 
 # Model and tokenizer names
-# base_model_name = "NousResearch/Llama-2-7b-chat-hf"
 base_model_name = "NousResearch/Llama-2-7b-hf"
-# fine_tuned_model_name = "oslab/llama-2-7b-oslab2"
 fine_tuned_model_name = "/home/work/data_yhgo/cyshin/agi/fine-tune_ccdv-sum_epoch01/"
 
 # [2] Creating Llama2 Tokenizer
@@ -50,46 +55,91 @@ base_model = AutoModelForCausalLM.from_pretrained(
     quantization_config=quant_config,
     device_map="auto" # accelerate library
     # device_map={"": 0}
-
 )
 base_model.config.use_cache = False
 base_model.config.pretraining_tp = 1
 
-# [5] Get max length of input data 
-lenmax = 0
-for item in test_data:
-  lenitem = len(item['article'])
-  if lenitem > lenmax:
-    lenmax = lenitem
+base_model_pipe = pipeline(task="text-generation", model=base_model, tokenizer=llama_tokenizer, max_new_tokens=128)
+langchain_pipe = HuggingFacePipeline(pipeline=base_model_pipe)
 
 # [6] Loading fine-tuned model
-lora_config = LoraConfig.from_pretrained(fine_tuned_model_name)
-fine_tuned_model = get_peft_model(base_model, lora_config)
+# fine_tuned_model = PeftModel.from_pretrained(base_model, fine_tuned_model_name, local_files_only=True)
 
-base_model = pipeline(task="summarization", model=base_model_name, tokenizer=llama_tokenizer, max_length=lenmax)
-fine_tuned_model = pipeline(task="summarization", model=fine_tuned_model, tokenizer=llama_tokenizer, max_length=lenmax)
+# fine_tuned_model_pipe = pipeline(task="text-generation", model=fine_tuned_model, tokenizer=llama_tokenizer, max_new_tokens=128)
+# langchain_pipe = HuggingFacePipeline(pipeline=fine_tuned_model_pipe)
 
-# [7] Evaluating rouge-score
+# [7] Generating summurization logic for llama2 with text-generation task 
+# LangChain: https://python.langchain.com/docs/get_started/introduction
+def generate_summary_chunk(text_chunk):
+  # Defining the template to generate summary
+  template = """
+  Write a concise summary of the text, return your responses with only 1 answer that cover the key points of the text.
+  ```{text}```
+  SUMMARY:
+  """
+  prompt = PromptTemplate(template=template, input_variables=["text"])
+  llm_chain = LLMChain(prompt=prompt, llm=langchain_pipe)
+  summary = llm_chain.run(text_chunk)
+  # print("_________________")
+  # print("text: ", text_chunk)
+  # print("_________________")
+  splited_summary = summary.split(".")
+  if splited_summary[0] == "1":
+    summary = splited_summary[1] + "."
+  else:
+    summary = splited_summary[0] + "."
+  # print("summary: ", summary)
+  return summary
+
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=2048, chunk_overlap=10, length_function=len)
+
+def generate_summary(input_text):
+  chunks = text_splitter.split_text(input_text)
+  print("input_text length: ", len(input_text))
+  print("#chunks: ", len(chunks))
+  chunk_summaries = []
+
+  start = time.time()
+
+  for chunk in chunks:
+    summary = generate_summary_chunk(chunk)
+    chunk_summaries.append(summary)      
+
+  end = time.time()
+
+  print(f"{end - start:.5f} sec")
+
+  combined_summary = "\n".join(chunk_summaries) 
+  return combined_summary
+
+
+# [7] Predicting & evaluating rouge-score
 references = []
 predictions = []
+
+num_paper = 10
+cur_idx = 0
 
 rouge = evaluate.load("rouge")
 for item in test_data:
   reference = item['abstract']
   references.append(reference)
 
-  prediction = fine_tuned_model.predict(item['article'])
-  predictions.append(prediction[0]['summary_text'])
+  prediction = generate_summary(item['article'])
+  predictions.append(prediction)
+
+  cur_idx += 1
+
+  if cur_idx == num_paper:
+    break
   
+print(num_paper, "paper score")
+
 results = rouge.compute(predictions=predictions,
                         references=references)
 
 print(results)
 
-# [7] Evaluating rouge-score with evaluator
-# task_evaluator = evaluate.evaluator("summarization")
-# results = task_evaluator.compute(model_or_pipe=fine_tuned_model, data=test_data, metric=rouge, input_column="article", output_column="abstract")
-# print(results)
 
 
 
